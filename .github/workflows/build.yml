@@ -22,26 +22,38 @@ jobs:
           distribution: temurin
           java-version: '17'
 
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.7'
+
       - name: Set up Android SDK
         run: |
-          export ANDROID_HOME=${ANDROID_HOME:-/usr/local/lib/android/sdk}
           echo "ANDROID_HOME=$ANDROID_HOME" >> $GITHUB_ENV
-          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
-          if [ ! -x "$SDKMANAGER" ]; then
-            SDKMANAGER=$(find "$ANDROID_HOME/cmdline-tools" -name sdkmanager -type f | head -n 1)
+          SDK="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          if [ ! -x "$SDK" ]; then
+            SDK=$(find "$ANDROID_HOME/cmdline-tools" -name sdkmanager -type f | head -n 1)
           fi
-          test -x "$SDKMANAGER"
-          yes | "$SDKMANAGER" --licenses || true
-          "$SDKMANAGER" --install "platform-tools" "platforms;android-35" "build-tools;35.0.0"
+          yes | "$SDK" --licenses || true
+          "$SDK" --install "platform-tools" "platforms;android-35" "build-tools;35.0.0"
 
       - name: Build APK
         run: |
-          cd project
-          WRAPPER=$(find . -name gradlew -type f | head -n 1)
-          test -n "$WRAPPER"
-          cd "$(dirname "$WRAPPER")"
-          chmod +x gradlew
-          ./gradlew assembleDebug
+          echo "Searching for Android project..."
+          find project -maxdepth 5 -type f \( -name settings.gradle -o -name settings.gradle.kts \)
+          ROOT=$(find project -type f \( -name settings.gradle -o -name settings.gradle.kts \) -print -quit)
+          if [ -z "$ROOT" ]; then
+            echo "No Gradle settings file found"
+            find project -maxdepth 4 -type f | head -100
+            exit 1
+          fi
+          cd "$(dirname "$ROOT")"
+          if [ -f gradlew ]; then
+            chmod +x gradlew
+            ./gradlew assembleDebug
+          else
+            gradle assembleDebug
+          fi
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
